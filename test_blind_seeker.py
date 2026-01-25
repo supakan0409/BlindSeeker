@@ -3,100 +3,101 @@ import asyncio
 from blind_seeker2 import BlindSQLExploiter, InjectionStrategy, BooleanBasedStrategy
 
 # ==========================================
-# 🎭 MOCK OBJECTS (ตัวแสดงแทน)
+# MOCK OBJECTS
 # ==========================================
 class MockStrategy(InjectionStrategy):
     """
-    Strategy ของปลอม สำหรับทดสอบ Logic (ไม่ต้องต่อเน็ตจริง)
-    มันจะจำลองว่าตัวเองเป็น Database ที่ชื่อว่า 'secret_db'
+    Mock Strategy for offline testing.
+    Simulates a database interaction without network calls.
+    Target Database Name: Configurable via constructor.
     """
     def __init__(self, target_db_name="secret_db"):
         self.target_db_name = target_db_name
 
     async def is_truthy(self, session, payload: str) -> bool:
-        # จำลองการประมวลผล SQL แบบง่ายๆ ใน Python
-        # Payload ที่ส่งมาหน้าตาประมาณ: 1' AND ASCII(SUBSTRING(database(),1,1)) > 100 #
+        # Simulate SQL logic in Python
+        # Example payload: 1' AND ASCII(SUBSTRING(database(),1,1)) > 100 #
         
-        # 1. จำลองการหาความยาว (LENGTH)
+        # 1. Simulate LENGTH() check
         if "LENGTH(database())" in payload:
-            # ดึงเลขที่ Code ถามมา (เช่น ... = 4)
-            # ตัวอย่าง payload: "1' AND LENGTH(database()) = 5 #"
+            # Extract the length value being checked
+            # Payload format: ... = 5 #
             check_val = int(payload.split('=')[1].strip().replace('#', ''))
             return len(self.target_db_name) == check_val
 
-        # 2. จำลองการหาตัวอักษร (ASCII/SUBSTRING)
+        # 2. Simulate ASCII/SUBSTRING check
         if "ASCII(SUBSTRING" in payload:
-            # Payload: ...database(),{pos},1)) > {mid} #
+            # Payload format: ...database(),{pos},1)) > {mid} #
             parts = payload.split(',')
-            position = int(parts[1]) # ดึงตำแหน่ง (pos)
+            position = int(parts[1]) # Extract position
             
-            # ดึงค่า mid ที่ถาม (... > 100)
+            # Extract the comparison value (mid)
             check_condition = payload.split('>')[1].strip().replace('#', '')
             mid_value = int(check_condition)
 
-            # ดึงตัวอักษรจริงจาก Database ปลอมของเรา
-            # position เริ่มที่ 1 แต่ string index เริ่มที่ 0
+            # Check bounds (1-based index in SQL vs 0-based in Python)
             if position > len(self.target_db_name):
                 return False
                 
             actual_char = self.target_db_name[position - 1]
             actual_ascii = ord(actual_char)
 
-            # ตอบกลับเหมือน SQL (True ถ้า ASCII จริง มากกว่าค่าที่ถาม)
+            # Return True if actual ASCII value is greater than the check value
             return actual_ascii > mid_value
 
         return False
 
 # ==========================================
-# ✅ TEST CASES
+# TEST CASES
 # ==========================================
 
-# 1. Test Cookie Parsing (เทสฟังก์ชันย่อย)
+# 1. Test Cookie Parsing Utility
 def test_cookie_parsing():
-    # สร้าง instance เปล่าๆ ขึ้นมาเพื่อเทส method
+    """Verify that raw cookie strings are parsed correctly into dictionaries."""
     exploiter = BlindSQLExploiter(None, "PHPSESSID=12345; security=low")
     
     expected = {'PHPSESSID': '12345', 'security': 'low'}
     assert exploiter.cookies == expected
-    print("\n✅ Cookie Parsing Test Passed")
+    print("\nCookie Parsing Test Passed")
 
-# 2. Test Binary Search Algorithm (เทส Logic หลัก)
+# 2. Test Binary Search Algorithm Logic
 @pytest.mark.asyncio
 async def test_binary_search_logic():
+    """Verify the binary search logic against the Mock Strategy."""
     target_name = "super_secret"
     mock_strategy = MockStrategy(target_name)
     
-    # Init Engine โดยใช้ Mock Strategy (ไม่ต้องใส่ URL จริง)
+    # Initialize engine with Mock Strategy
     engine = BlindSQLExploiter(mock_strategy, "")
     
-    # สร้าง Session ปลอม (Mock object) เพราะ MockStrategy ไม่ได้ใช้ session จริง
+    # Use None for session as MockStrategy doesn't use it
     fake_session = None 
 
-    # ลองให้ Engine หาตัวอักษรตำแหน่งที่ 1 ('s')
-    # 's' คือ ASCII 115
+    # Attempt to find the first character ('s' -> ASCII 115)
     await engine._binary_search_char(fake_session, 1)
     
-    # ตรวจสอบผลลัพธ์
+    # Verify result
     assert engine.results[1] == 's'
-    print(f"\n✅ Logic Test Passed: Found 's' correctly")
+    print(f"\nLogic Test Passed: Found 's' correctly")
 
-# 3. Test Full Flow (จำลองการเจาะทั้งคำ)
+# 3. Test Full Extraction Flow
 @pytest.mark.asyncio
 async def test_full_extraction_flow():
-    target_name = "testdb" # ยาว 6 ตัว
+    """Verify the entire flow: Length check -> Parallel Extraction -> Result Assembly."""
+    target_name = "testdb" # Length: 6
     mock_strategy = MockStrategy(target_name)
     engine = BlindSQLExploiter(mock_strategy, "")
     
-    # จำลองการหาความยาว (เราเรียกฟังก์ชัน _find_length ผ่าน Mock)
+    # 1. Verify Length Detection
     length_found = await engine._find_length(None)
     assert length_found == 6
     
-    # จำลองการหาตัวอักษรทุกตัว
+    # 2. Verify Character Extraction (Parallel)
     tasks = [engine._binary_search_char(None, pos) for pos in range(1, length_found + 1)]
     await asyncio.gather(*tasks)
     
-    # รวมร่างผลลัพธ์
+    # 3. Verify Final Assembly
     extracted = "".join([engine.results[i] for i in sorted(engine.results.keys())])
     
     assert extracted == target_name
-    print(f"\n✅ Full Flow Test Passed: Expected '{target_name}', Got '{extracted}'")
+    print(f"\nFull Flow Test Passed: Expected '{target_name}', Got '{extracted}'")
