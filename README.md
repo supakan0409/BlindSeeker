@@ -69,7 +69,7 @@ python blind_seeker2.py -u "TARGET_URL" -c "COOKIE_STRING"
 
 #### Example
 ```bash
-python blind_seeker_pro.py -u "http://localhost/vulnerabilities/sqli_blind/" -c "PHPSESSID=your_session_id_here; security=low" -t 50
+python blind_seeker2.py -u "http://localhost/vulnerabilities/sqli_blind/" -c "PHPSESSID=your_session_id_here; security=low" -t 50
 ```
 
 ### 🚀 Development & Testing
