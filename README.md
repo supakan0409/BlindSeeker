@@ -1,4 +1,6 @@
 # BlindSeeker (High-Performance Async SQLi Tool)
+[![BlindSeeker CI Pipeline](https://github.com/supakan0409/BlindSeeker/actions/workflows/python-app.yml/badge.svg)](https://github.com/supakan0409/BlindSeeker/actions/workflows/python-app.yml)
+
  <p align="center">
    A high-performance, asynchronous Blind SQL Injection tool developed to study advanced exploitation techniques.
  </p>
