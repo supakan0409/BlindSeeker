@@ -9,25 +9,33 @@
  > **FOR EDUCATIONAL PURPOSES ONLY.** This project was created to demonstrate the application of algorithms and asynchronous programming in cybersecurity. The author is not responsible for any misuse.
 ---
 
-### ⚡ Key Features
+## ⚡ Key Features
 * **High Performance:** Utilizes `aiohttp` for efficient, non-blocking HTTP requests.
 * **Algorithm Implementation:** Applies Binary Search to reduce request count by over 90%.
 * **Clean Architecture:** Built using the **Strategy Design Pattern** (OOP) for modularity and maintainability.
 * **Stability Control:** Includes `Semaphore` based rate-limiting to manage request concurrency.
 * **Automated Testing:** Includes unit tests integrated with **GitHub Actions CI/CD.**
 
-### 📊 Performance Benchmark
+## 📊 Performance Benchmark
 Tested on a local lab environment (Docker/DVWA).
 | Method | Algorithm | Concurrency Model | Time Taken | Throughput |
 | :--- | :--- | :--- | :--- | :--- |
-| Linear Search | $O(n)$ | Synchronous | ~2.03s | ~15 req/s |
-| Binary Search | $O(\log n)$ | Threading (10 threads) | ~0.28s | ~89 req/s |
-| **BlindSeeker Pro** | **$O(\log n)$** | **Asyncio (20 tasks)** | **~0.06s** | **~465 req/s 🚀** |
+| Linear Search | $O(n)$ | Synchronous | ~1.74s | ~178 req/s |
+| Binary Search | $O(\log n)$ | Synchronous | ~0.13s | ~187 req/s |
+| **BlindSeeker** | **$O(\log n)$** | **Asyncio (20 tasks)** | **~0.06s** | **~458 req/s** |
 
-<img width="500" height="300" alt="download777" src="benchmark_graph.png" />
+<img width="550" height="350" alt="Image" src="https://github.com/user-attachments/assets/52548e88-8431-47bc-aa42-8744ae8cc8b9" /><br>
 
+### 📸 Proof of Concept
+* **Linear Search & Binary Search**
 
-### 🧩 Architecture
+<img width="301" height="317" alt="Image" src="https://github.com/user-attachments/assets/73106b65-4486-4021-bff5-a5c2ad7f6d2f" /><br>
+
+* **BlindSeeker**
+
+<img width="404" height="200" alt="Image" src="https://github.com/user-attachments/assets/4f505b05-04d6-4e07-8a63-0c99d7dac5f4" /><br>
+
+## 🧩 Architecture
 The tool uses an asynchronous event loop to manage concurrent tasks efficiently.
 
 ```mermaid
@@ -45,7 +53,7 @@ sequenceDiagram
     end
     Engine->>Engine: Aggregate Results
 ```
-### 🛠️ Installation
+## 🛠️ Installation
 **1. Clone the repository:**
 ```bash
 git clone https://github.com/supakan0409/BlindSeeker.git
@@ -56,7 +64,7 @@ cd BlindSeeker
 pip install -r requirements.txt
 ```
 
-### 💻 Usage
+## 💻 Usage
 Run the tool using the command line interface:
 ```bash
 python blind_seeker2.py -u "TARGET_URL" -c "COOKIE_STRING"
@@ -65,7 +73,7 @@ python blind_seeker2.py -u "TARGET_URL" -c "COOKIE_STRING"
 * `-u, --url` (Required): The target URL containing the Blind SQL Injection vulnerability.
 * `-c, --cookie` (Required): Authenticated session cookies (e.g., `"PHPSESSID=xyz; security=low"`).
 * `-s, --success` (Optional): The string indicating a TRUE query result (Default: `"User ID exists"`).
-* `-t,` --concurrency (Optional): Max concurrent requests (Default: `20`).
+* `-t, --concurrency` (Optional): Max concurrent requests (Default: `20`).
 
 #### Example
 ```bash
